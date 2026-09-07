@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 
 app = dash.Dash(
     __name__,
-    title="Sorting Visualizer",
+    title="Sortviz by Nizalia",
     external_stylesheets=[
         dbc.themes.DARKLY,
         dbc.icons.FONT_AWESOME
@@ -25,11 +25,11 @@ THEMES = {
         "border": "rgba(255, 255, 255, 0.1)",
         "grid": "rgba(255, 255, 255, 0.05)",
         "colors": {
-            "default": "#6366F1",  # Neon Indigo
-            "compare": "#F43F5E",  # Coral / Pink
-            "swap": "#F59E0B",     # Amber
-            "sorted": "#10B981",   # Emerald Green
-            "pivot": "#A855F7",    # Purple
+            "default": "#6366F1",
+            "compare": "#F43F5E",
+            "swap": "#F59E0B",
+            "sorted": "#10B981",
+            "pivot": "#A855F7",
         }
     },
     "light": {
@@ -41,11 +41,11 @@ THEMES = {
         "border": "rgba(0, 0, 0, 0.08)",
         "grid": "rgba(0, 0, 0, 0.05)",
         "colors": {
-            "default": "#4F46E5",  # Royal Blue
-            "compare": "#E11D48",  # Rose
-            "swap": "#D97706",     # Deep Amber
-            "sorted": "#059669",   # Jade Green
-            "pivot": "#7C3AED",    # Deep Purple
+            "default": "#4F46E5",
+            "compare": "#E11D48",
+            "swap": "#D97706",
+            "sorted": "#059669",
+            "pivot": "#7C3AED",
         }
     }
 }
@@ -289,7 +289,7 @@ app.layout = html.Div(
                 dcc.Store(id="store-steps"),
                 dcc.Store(id="store-orig"),
                 dcc.Store(id="store-theme", data="dark"),
-                dcc.Interval(id="client-interval", interval=50, disabled=True),
+                dcc.Store(id="store-trigger", data=0),
 
                 # App Header
                 html.Div(
@@ -298,7 +298,7 @@ app.layout = html.Div(
                         html.Div(
                             children=[
                                 html.H1(
-                                    "SORTING VISUALIZER",
+                                    "SORTVIZ",
                                     style={
                                         "fontSize": "38px",
                                         "fontWeight": "900",
@@ -309,7 +309,7 @@ app.layout = html.Div(
                                         "margin": "0 0 4px 0",
                                     },
                                 ),
-                                html.P("Real-time algorithmic execution & complexity profiler", id="sub-title", style={"color": THEMES["dark"]["text_muted"], "fontSize": "15px", "margin": "0"}),
+                                html.P("Sorting Visualizer and Real-time algorithmic execution & complexity profiler", id="sub-title", style={"color": THEMES["dark"]["text_muted"], "fontSize": "15px", "margin": "0"}),
                             ]
                         ),
                         dbc.Button(
@@ -579,30 +579,9 @@ def new_array(n_clicks, size, algo, theme_key, show_val):
     return arr, None, fig, "0", "0", tc, sc, "Array initialized. Click ▶ Run Algorithm to start."
 
 
-# Start Sorting Engine
-@app.callback(
-    Output("store-steps", "data", allow_duplicate=True),
-    Output("client-interval", "disabled"),
-    Output("client-interval", "interval"),
-    Input("btn-start", "n_clicks"),
-    State("store-orig", "data"),
-    State("dd-algo", "value"),
-    State("sl-speed", "value"),
-    prevent_initial_call=True,
-)
-def start_sort(n_clicks, orig_data, algo, speed):
-    if not orig_data:
-        return dash.no_update, True, 50
-
-    steps = generate_steps(orig_data, algo)
-    interval_ms = max(10, int(200 / (1.5 ** (speed - 1))))
-    return steps, False, interval_ms
-
-
 # Reset State
 @app.callback(
     Output("store-steps", "data", allow_duplicate=True),
-    Output("client-interval", "disabled", allow_duplicate=True),
     Output("graph", "figure", allow_duplicate=True),
     Output("stat-cmp", "children", allow_duplicate=True),
     Output("stat-swp", "children", allow_duplicate=True),
@@ -615,131 +594,134 @@ def start_sort(n_clicks, orig_data, algo, speed):
 )
 def reset(n_clicks, orig_data, theme_key, show_val):
     if not orig_data:
-        return None, True, dash.no_update, "0", "0", "Array reset."
+        return None, dash.no_update, "0", "0", "Array reset."
 
     colors = ["default"] * len(orig_data)
     show_labels = True if show_val and len(show_val) > 0 else False
     fig = make_figure(orig_data, colors, theme_key=theme_key, show_labels=show_labels)
-    return None, True, fig, "0", "0", "Array reset."
+    return None, fig, "0", "0", "Array reset."
 
 
-# ── Frame Reset Callback (Resets animation index on button clicks) ───────────
+# Start Sorting Engine (Triggers JS Loop)
+@app.callback(
+    Output("store-steps", "data", allow_duplicate=True),
+    Output("store-trigger", "data"),
+    Input("btn-start", "n_clicks"),
+    State("store-orig", "data"),
+    State("dd-algo", "value"),
+    State("store-trigger", "data"),
+    prevent_initial_call=True,
+)
+def start_sort(n_clicks, orig_data, algo, trigger_val):
+    if not orig_data:
+        return dash.no_update, dash.no_update
+
+    steps = generate_steps(orig_data, algo)
+    return steps, (trigger_val or 0) + 1
+
+
+# Pure JavaScript Animation Engine (Guaranteed Auto-Stop)
 clientside_callback(
     """
-    function(n_start, n_gen, n_reset) {
-        window.animFrame = 0;
+    function(trigger, steps, theme_key, show_val, speed) {
+        if (!steps || steps.length === 0) {
+            return;
+        }
+
+        // Cancel any previous running animation timer
+        if (window.animTimer) {
+            clearInterval(window.animTimer);
+            window.animTimer = null;
+        }
+
+        var frameIdx = 0;
+        var intervalMs = Math.max(10, Math.floor(200 / Math.pow(1.5, speed - 1)));
+
+        window.animTimer = setInterval(function() {
+            if (frameIdx >= steps.length) {
+                // STOP IMMEDIATELY
+                clearInterval(window.animTimer);
+                window.animTimer = null;
+
+                var lastStep = steps[steps.length - 1];
+                document.getElementById("stat-cmp").innerText = String(lastStep.cmp);
+                document.getElementById("stat-swp").innerText = String(lastStep.swp);
+                document.getElementById("status-msg").innerText = "COMPLETE: " + lastStep.cmp + " COMPARISONS, " + lastStep.swp + " SWAPS";
+                return;
+            }
+
+            var step = steps[frameIdx];
+            var theme = (theme_key === 'light') ? {
+                grid: 'rgba(0,0,0,0.05)',
+                text_muted: '#64748B',
+                colors: {
+                    default: '#4F46E5',
+                    compare: '#E11D48',
+                    swap: '#D97706',
+                    sorted: '#059669',
+                    pivot: '#7C3AED'
+                }
+            } : {
+                grid: 'rgba(255,255,255,0.05)',
+                text_muted: '#CBD5E1',
+                colors: {
+                    default: '#6366F1',
+                    compare: '#F43F5E',
+                    swap: '#F59E0B',
+                    sorted: '#10B981',
+                    pivot: '#A855F7'
+                }
+            };
+
+            var barColors = step.colors.map(function(c) {
+                return theme.colors[c] || theme.colors.default;
+            });
+
+            var showLabels = show_val && show_val.length > 0;
+            var barData = {
+                x: Array.from(Array(step.arr.length).keys()),
+                y: step.arr,
+                type: 'bar',
+                marker: { color: barColors, line: { width: 0 }, cornerradius: '30%' }
+            };
+
+            if (showLabels) {
+                barData.text = step.arr;
+                barData.textposition = 'outside';
+                barData.textfont = { color: theme.text_muted, size: 10, family: 'Inter, sans-serif' };
+            }
+
+            var maxVal = Math.max.apply(null, step.arr) + 15;
+            var layout = {
+                margin: { l: 10, r: 10, t: 25, b: 10 },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                showlegend: false,
+                uirevision: 'constant',
+                xaxis: { showticklabels: false, showgrid: false, zeroline: false },
+                yaxis: { showgrid: true, gridcolor: theme.grid, zeroline: false, range: [0, maxVal] },
+                bargap: 0.18,
+                height: 360
+            };
+
+            Plotly.react('graph', [barData], layout, {displayModeBar: false});
+
+            document.getElementById("stat-cmp").innerText = String(step.cmp);
+            document.getElementById("stat-swp").innerText = String(step.swp);
+            document.getElementById("status-msg").innerText = "STEP " + (frameIdx + 1) + " / " + steps.length;
+
+            frameIdx++;
+        }, intervalMs);
+
         return window.dash_clientside.no_update;
     }
     """,
-    Output("store-steps", "id"),
-    Input("btn-start", "n_clicks"),
-    Input("btn-gen", "n_clicks"),
-    Input("btn-reset", "n_clicks"),
-    prevent_initial_call=True
-)
-
-
-# ── Clientside Animation Controller ──────────────────────────────────────────
-clientside_callback(
-    """
-    function(n_intervals, steps, theme_key, show_val) {
-        if (!steps || steps.length === 0) {
-            window.animFrame = 0;
-            return [dash.no_update, "0", "0", "Select settings and click ▶ Run Algorithm", true];
-        }
-
-        if (typeof window.animFrame === 'undefined') {
-            window.animFrame = 0;
-        }
-
-        // STOP CONDITION: Once execution reaches the end of the steps array
-        if (window.animFrame >= steps.length) {
-            var lastStep = steps[steps.length - 1];
-            var finalCmp = String(lastStep.cmp);
-            var finalSwp = String(lastStep.swp);
-            var statusText = "COMPLETE: " + finalCmp + " COMPARISONS, " + finalSwp + " SWAPS";
-            
-            window.animFrame = 0; // Reset index for future runs
-            
-            return [
-                dash.no_update, 
-                finalCmp, 
-                finalSwp, 
-                statusText, 
-                true  // Disables the dcc.Interval immediately
-            ];
-        }
-
-        var step = steps[window.animFrame];
-        var theme = (theme_key === 'light') ? {
-            grid: 'rgba(0,0,0,0.05)',
-            text_muted: '#64748B',
-            colors: {
-                default: '#4F46E5',
-                compare: '#E11D48',
-                swap: '#D97706',
-                sorted: '#059669',
-                pivot: '#7C3AED'
-            }
-        } : {
-            grid: 'rgba(255,255,255,0.05)',
-            text_muted: '#CBD5E1',
-            colors: {
-                default: '#6366F1',
-                compare: '#F43F5E',
-                swap: '#F59E0B',
-                sorted: '#10B981',
-                pivot: '#A855F7'
-            }
-        };
-
-        var barColors = step.colors.map(function(c) {
-            return theme.colors[c] || theme.colors.default;
-        });
-
-        var showLabels = show_val && show_val.length > 0;
-        var barData = {
-            x: Array.from(Array(step.arr.length).keys()),
-            y: step.arr,
-            type: 'bar',
-            marker: { color: barColors, line: { width: 0 }, cornerradius: '30%' }
-        };
-
-        if (showLabels) {
-            barData.text = step.arr;
-            barData.textposition = 'outside';
-            barData.textfont = { color: theme.text_muted, size: 10, family: 'Inter, sans-serif' };
-        }
-
-        var maxVal = Math.max.apply(null, step.arr) + 15;
-        var layout = {
-            margin: { l: 10, r: 10, t: 25, b: 10 },
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            showlegend: false,
-            uirevision: 'constant',
-            xaxis: { showticklabels: false, showgrid: false, zeroline: false },
-            yaxis: { showgrid: true, gridcolor: theme.grid, zeroline: false, range: [0, maxVal] },
-            bargap: 0.18,
-            height: 360
-        };
-
-        var currentFrame = window.animFrame + 1;
-        window.animFrame = currentFrame;
-        var msg = "STEP " + currentFrame + " / " + steps.length;
-
-        return [{ data: [barData], layout: layout }, String(step.cmp), String(step.swp), msg, false];
-    }
-    """,
-    Output("graph", "figure", allow_duplicate=True),
-    Output("stat-cmp", "children", allow_duplicate=True),
-    Output("stat-swp", "children", allow_duplicate=True),
-    Output("status-msg", "children", allow_duplicate=True),
-    Output("client-interval", "disabled", allow_duplicate=True),
-    Input("client-interval", "n_intervals"),
+    Output("store-trigger", "id"),
+    Input("store-trigger", "data"),
     State("store-steps", "data"),
     State("store-theme", "data"),
     State("sw-values", "value"),
+    State("sl-speed", "value"),
     prevent_initial_call=True
 )
 
