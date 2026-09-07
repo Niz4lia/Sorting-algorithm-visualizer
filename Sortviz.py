@@ -507,9 +507,9 @@ def toggle_theme(n_clicks, current_theme):
         "fontFamily": "Inter, system-ui, sans-serif",
         "transition": "all 0.3s ease"
     }
-    
+
     sub_title_style = {"color": t["text_muted"], "fontSize": "15px", "margin": "0"}
-    
+
     card_style = {
         "backgroundColor": t["card_bg"],
         "backdropFilter": "blur(12px)",
@@ -518,7 +518,7 @@ def toggle_theme(n_clicks, current_theme):
         "boxShadow": "0 20px 25px -5px rgba(0, 0, 0, 0.15)",
         "transition": "all 0.3s ease"
     }
-    
+
     controls_style = {
         **card_style,
         "position": "relative",
