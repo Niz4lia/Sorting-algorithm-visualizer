@@ -1,7 +1,8 @@
 import random
 import json
 import dash
-from dash import dcc, html, Input, Output, State, clientside_callbackimport random
+from dash import dcc, html, Input, Output, State, clientside_callback
+import random
 import json
 import dash
 from dash import dcc, html, Input, Output, State, clientside_callback
