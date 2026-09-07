@@ -290,6 +290,7 @@ app.layout = html.Div(
                 dcc.Store(id="store-orig"),
                 dcc.Store(id="store-theme", data="dark"),
                 dcc.Store(id="store-trigger", data=0),
+                dcc.Store(id="store-reset-signal", data=0),
 
                 # App Header
                 html.Div(
@@ -563,20 +564,22 @@ def toggle_theme(n_clicks, current_theme):
     Output("stat-tc", "children"),
     Output("stat-sc", "children"),
     Output("status-msg", "children"),
+    Output("store-reset-signal", "data"),
     Input("btn-gen", "n_clicks"),
     Input("sl-size", "value"),
     Input("dd-algo", "value"),
     Input("store-theme", "data"),
     State("sw-values", "value"),
+    State("store-reset-signal", "data"),
 )
-def new_array(n_clicks, size, algo, theme_key, show_val):
+def new_array(n_clicks, size, algo, theme_key, show_val, reset_val):
     arr = [random.randint(10, 99) for _ in range(size)]
     colors = ["default"] * size
     show_labels = True if show_val and len(show_val) > 0 else False
     fig = make_figure(arr, colors, theme_key=theme_key, show_labels=show_labels)
     tc = COMPLEXITY[algo]["time"]
     sc = COMPLEXITY[algo]["space"]
-    return arr, None, fig, "0", "0", tc, sc, "Array initialized. Click ▶ Run Algorithm to start."
+    return arr, None, fig, "0", "0", tc, sc, "Array initialized. Click ▶ Run Algorithm to start.", (reset_val or 0) + 1
 
 
 # Reset State
@@ -586,20 +589,22 @@ def new_array(n_clicks, size, algo, theme_key, show_val):
     Output("stat-cmp", "children", allow_duplicate=True),
     Output("stat-swp", "children", allow_duplicate=True),
     Output("status-msg", "children", allow_duplicate=True),
+    Output("store-reset-signal", "data", allow_duplicate=True),
     Input("btn-reset", "n_clicks"),
     State("store-orig", "data"),
     State("store-theme", "data"),
     State("sw-values", "value"),
+    State("store-reset-signal", "data"),
     prevent_initial_call=True,
 )
-def reset(n_clicks, orig_data, theme_key, show_val):
+def reset(n_clicks, orig_data, theme_key, show_val, reset_val):
     if not orig_data:
-        return None, dash.no_update, "0", "0", "Array reset."
+        return None, dash.no_update, "0", "0", "Array reset.", (reset_val or 0) + 1
 
     colors = ["default"] * len(orig_data)
     show_labels = True if show_val and len(show_val) > 0 else False
     fig = make_figure(orig_data, colors, theme_key=theme_key, show_labels=show_labels)
-    return None, fig, "0", "0", "Array reset."
+    return None, fig, "0", "0", "Array reset.", (reset_val or 0) + 1
 
 
 # Start Sorting Engine (Triggers JS Loop)
@@ -620,7 +625,24 @@ def start_sort(n_clicks, orig_data, algo, trigger_val):
     return steps, (trigger_val or 0) + 1
 
 
-# Pure JavaScript Animation Engine (Guaranteed Auto-Stop)
+# Immediate Animation Cancellation on Reset / New Array
+clientside_callback(
+    """
+    function(reset_signal) {
+        if (window.animTimer) {
+            clearInterval(window.animTimer);
+            window.animTimer = null;
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("store-reset-signal", "id"),
+    Input("store-reset-signal", "data"),
+    prevent_initial_call=True
+)
+
+
+# Pure JavaScript Animation Engine
 clientside_callback(
     """
     function(trigger, steps, theme_key, show_val, speed) {
