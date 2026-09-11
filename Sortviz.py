@@ -290,7 +290,6 @@ app.layout = html.Div(
                 dcc.Store(id="store-orig"),
                 dcc.Store(id="store-theme", data="dark"),
                 dcc.Store(id="store-trigger", data=0),
-                dcc.Store(id="store-reset-signal", data=0),
 
                 # App Header
                 html.Div(
@@ -383,7 +382,7 @@ app.layout = html.Div(
                                         [
                                             dbc.Button("New Array", id="btn-gen", color="secondary", outline=True, className="me-2 px-4 fw-bold", style={"borderRadius": "8px"}),
                                             dbc.Button("▶ Run Algorithm", id="btn-start", color="primary", className="me-2 px-4 fw-bold", style={"borderRadius": "8px", "background": "linear-gradient(90deg, #6366F1, #8B5CF6)", "border": "none"}),
-                                            dbc.Button("↺ Reset", id="btn-reset", color="dark", className="px-3", style={"borderRadius": "8px"}),
+                                            dbc.Button("↺ Refresh", id="btn-refresh", color="dark", className="px-3 fw-bold", style={"borderRadius": "8px"}),
                                         ],
                                         width=6,
                                         className="d-flex justify-content-end",
@@ -564,25 +563,23 @@ def toggle_theme(n_clicks, current_theme):
     Output("stat-tc", "children"),
     Output("stat-sc", "children"),
     Output("status-msg", "children"),
-    Output("store-reset-signal", "data"),
     Input("btn-gen", "n_clicks"),
     Input("sl-size", "value"),
     Input("dd-algo", "value"),
     Input("store-theme", "data"),
     State("sw-values", "value"),
-    State("store-reset-signal", "data"),
 )
-def new_array(n_clicks, size, algo, theme_key, show_val, reset_val):
+def new_array(n_clicks, size, algo, theme_key, show_val):
     arr = [random.randint(10, 99) for _ in range(size)]
     colors = ["default"] * size
     show_labels = True if show_val and len(show_val) > 0 else False
     fig = make_figure(arr, colors, theme_key=theme_key, show_labels=show_labels)
     tc = COMPLEXITY[algo]["time"]
     sc = COMPLEXITY[algo]["space"]
-    return arr, None, fig, "0", "0", tc, sc, "Array initialized. Click ▶ Run Algorithm to start.", (reset_val or 0) + 1
+    return arr, None, fig, "0", "0", tc, sc, "Array initialized. Click ▶ Run Algorithm to start."
 
 
-# Reset Button Page Refresh
+# Refresh Button Browser Page Reload Callback
 clientside_callback(
     """
     function(n_clicks) {
@@ -592,8 +589,8 @@ clientside_callback(
         return window.dash_clientside.no_update;
     }
     """,
-    Output("btn-reset", "id"),
-    Input("btn-reset", "n_clicks"),
+    Output("btn-refresh", "id"),
+    Input("btn-refresh", "n_clicks"),
     prevent_initial_call=True
 )
 
@@ -614,23 +611,6 @@ def start_sort(n_clicks, orig_data, algo, trigger_val):
 
     steps = generate_steps(orig_data, algo)
     return steps, (trigger_val or 0) + 1
-
-
-# Immediate Animation Cancellation on Reset / New Array
-clientside_callback(
-    """
-    function(reset_signal) {
-        if (window.animTimer) {
-            clearInterval(window.animTimer);
-            window.animTimer = null;
-        }
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("store-reset-signal", "id"),
-    Input("store-reset-signal", "data"),
-    prevent_initial_call=True
-)
 
 
 # Pure JavaScript Animation Engine
