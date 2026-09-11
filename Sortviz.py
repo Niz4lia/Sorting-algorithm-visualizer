@@ -582,29 +582,20 @@ def new_array(n_clicks, size, algo, theme_key, show_val, reset_val):
     return arr, None, fig, "0", "0", tc, sc, "Array initialized. Click ▶ Run Algorithm to start.", (reset_val or 0) + 1
 
 
-# Reset State
-@app.callback(
-    Output("store-steps", "data", allow_duplicate=True),
-    Output("graph", "figure", allow_duplicate=True),
-    Output("stat-cmp", "children", allow_duplicate=True),
-    Output("stat-swp", "children", allow_duplicate=True),
-    Output("status-msg", "children", allow_duplicate=True),
-    Output("store-reset-signal", "data", allow_duplicate=True),
+# Reset Button Page Refresh
+clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks) {
+            window.location.reload();
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("btn-reset", "id"),
     Input("btn-reset", "n_clicks"),
-    State("store-orig", "data"),
-    State("store-theme", "data"),
-    State("sw-values", "value"),
-    State("store-reset-signal", "data"),
-    prevent_initial_call=True,
+    prevent_initial_call=True
 )
-def reset(n_clicks, orig_data, theme_key, show_val, reset_val):
-    if not orig_data:
-        return None, dash.no_update, "0", "0", "Array reset.", (reset_val or 0) + 1
-
-    colors = ["default"] * len(orig_data)
-    show_labels = True if show_val and len(show_val) > 0 else False
-    fig = make_figure(orig_data, colors, theme_key=theme_key, show_labels=show_labels)
-    return None, fig, "0", "0", "Array reset.", (reset_val or 0) + 1
 
 
 # Start Sorting Engine (Triggers JS Loop)
